@@ -1,0 +1,9 @@
+.metals/metals.lock.db
+.metals/metals.mv.db
+.metals/metals.log
+.vscode/settings.json
+src/main/scala/data.csv
+src/main/scala/hydro.csv
+src/main/scala/nuclear.csv
+src/main/scala/wind.csv
+src/main/scala/apiKey.txt
