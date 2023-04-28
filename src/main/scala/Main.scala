@@ -7,31 +7,36 @@ import scala.io.Source
 val API_KEY = Source.fromFile("apiKey.txt").getLines().mkString
 
 object Main {
+  // Collect data from the API
   def collectData(
       dataSources: Map[Int, String]
   ): Unit = {
+    // Get the current time and truncate it to seconds
     val now = (java.time.LocalDateTime.now)
       .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
-    val startTime = now.minusMonths(3).toString().concat("Z")
-    val endTime = now.toString.concat("Z")
 
+    // Collect data from the API
     println("Collecting data...")
     for ((k, v) <- dataSources) {
       val url = new URL(
-        s"https://api.fingrid.fi/v1/variable/$k/events/csv?start_time=$startTime&end_time=$endTime"
+        s"https://api.fingrid.fi/v1/variable/$k/events/csv?start_time=${now
+            .minusMonths(3)
+            .toString()
+            .concat("Z")}&end_time=${now.toString.concat("Z")}"
       )
-
+      // Try to connect to the API endpoint
       Try(url.openConnection().asInstanceOf[HttpURLConnection]) match {
         case util.Success(connection) =>
           connection.setRequestMethod("GET")
           connection.setRequestProperty("Accept", "text/csv")
           connection.setRequestProperty("x-api-key", API_KEY)
           connection.connect()
-
+          // Try to read the response
           Try(
             scala.io.Source.fromInputStream(connection.getInputStream).mkString
           ) match {
             case util.Success(response) =>
+              // Write the response to a file
               Files.write(Paths.get(v), response.getBytes("UTF-8"))
             case util.Failure(e) =>
               System.err.println(
@@ -47,6 +52,7 @@ object Main {
     println("Collection completed")
   }
 
+  // Read data from a file
   def readData(filePath: String): Unit = {
     println("Reading data...")
     val bufferedSource = io.Source.fromFile(filePath)
@@ -57,9 +63,12 @@ object Main {
     bufferedSource.close
   }
 
+  // Modify the energy sources
   def modifySources(filePath: String): Unit = {
+    // Read the energy sources
     readData(filePath)
 
+    // Modify the energy sources
     print("Enter your choice:\n1) Modify\n2) Exit\n")
     val choice = readLine()
     choice match {
@@ -97,9 +106,8 @@ object Main {
     }
   }
 
+  // Main function
   def main(args: Array[String]): Unit = {
-    val now = (java.time.LocalDateTime.now)
-      .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
     while (true) {
       print(
         "REPS management system:\n1) Check energy sources\n2) Collect data\n3) View data\n4) Analyze data\n5) Exit\nEnter your choice: "
