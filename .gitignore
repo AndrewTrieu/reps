@@ -7,3 +7,7 @@ src/main/scala/hydro.csv
 src/main/scala/nuclear.csv
 src/main/scala/wind.csv
 src/main/scala/apiKey.txt
+src/main/scala/sources.csv
+project
+target
+
