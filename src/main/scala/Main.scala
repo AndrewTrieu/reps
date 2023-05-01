@@ -106,6 +106,72 @@ object Main {
     }
   }
 
+  // Calculate the mean, median, mode, range and midrange of the data
+  def calculateData(filePath: String): Unit = {
+    var data = List[Double]()
+    val bufferedSource = io.Source.fromFile(filePath)
+    for (line <- bufferedSource.getLines.drop(1)) {
+      val cols = line.split(",").map(_.trim)
+      data = data :+ cols(2).toDouble
+    }
+    bufferedSource.close
+
+    // Calculate the mean
+    val mean = data.sum / data.length
+    println(s"Mean: $mean")
+
+    // Calculate the median
+    val median = {
+      val (lower, upper) = data.sortWith(_ < _).splitAt(data.length / 2)
+      if (data.length % 2 == 0) (lower.last + upper.head) / 2.0
+      else upper.head
+    }
+    println(s"Median: $median")
+
+    // Calculate the mode
+    val mode = data
+      .groupBy(identity)
+      .view
+      .mapValues(_.size)
+      .maxBy(_._2)
+      ._1
+    println(s"Mode: $mode")
+
+    // Calculate the range
+    val range = data.max - data.min
+    println(s"Range: $range")
+
+    // Calculate the midrange
+    val midrange = (data.max + data.min) / 2
+    println(s"Midrange: $midrange")
+  }
+
+  // Analyze the data
+  def analyzeData(): Unit = {
+    print(
+      "Enter source to analyze:\n1) Wind\n2) Hydro\n3) Nuclear\n4) All\n5) Exit\n"
+    )
+    val choice = readLine()
+    choice match {
+      case "1" =>
+        println("Analyzing wind data...")
+        calculateData("wind.csv")
+      case "2" =>
+        println("Analyzing hydro data...")
+        calculateData("hydro.csv")
+      case "3" =>
+        println("Analyzing nuclear data...")
+        calculateData("nuclear.csv")
+      case "4" =>
+        println("Analyzing all data...")
+        calculateData("data.csv")
+      case "5" =>
+        return
+      case _ =>
+        println("Invalid choice")
+    }
+  }
+
   // Main function
   def main(args: Array[String]): Unit = {
     while (true) {
@@ -129,7 +195,7 @@ object Main {
         case "3" =>
           readData("data.csv")
         case "4" =>
-          println("Analyzing data...")
+          analyzeData()
         case "5" =>
           println("Exiting...")
           System.exit(0)
