@@ -1,22 +1,36 @@
 import java.net.{HttpURLConnection, URL}
 import java.nio.file.{Files, Paths}
+import java.util.Date
+import java.text.SimpleDateFormat
 import scala.util.Try
 import scala.io.StdIn.readLine
 import scala.io.Source
+import scala.collection.immutable.ListMap
 
 val API_KEY = Source.fromFile("apiKey.txt").getLines().mkString
 
+val dataSources = Map(
+  188 -> "nuclear.csv",
+  191 -> "hydro.csv",
+  181 -> "wind.csv",
+  192 -> "data.csv"
+)
+
+val energySources = "sources.csv"
+
+val alertThreshold = 1000.0
+
 object Main {
   // Collect data from the API
-  def collectData(
-      dataSources: Map[Int, String]
-  ): Unit = {
+  def collectData(): Unit = {
     // Get the current time and truncate it to seconds
     val now = (java.time.LocalDateTime.now)
       .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
 
     // Collect data from the API
     println("Collecting data...")
+
+    // Iterate over the data sources, not following functional programming paradigm
     for ((k, v) <- dataSources) {
       val url = new URL(
         s"https://api.fingrid.fi/v1/variable/$k/events/csv?start_time=${now
@@ -52,23 +66,40 @@ object Main {
     println("Collection completed")
   }
 
-  // Read data from a file
-  def readData(filePath: String): Unit = {
-    println("Reading data...")
-    val bufferedSource = io.Source.fromFile(filePath)
-    for (line <- bufferedSource.getLines) {
-      val cols = line.split(",").map(_.trim)
-      println(s"${cols(0)}\t${cols(1)}\t${cols(2)}")
+  // Modify the energy sources
+  def modifySources(
+      lines: List[String],
+      newValue: String,
+      sourceType: String
+  ): List[String] = {
+    val temp = lines(1).split(",")
+    // Match the source type and create a line with the new value
+    val newLine = sourceType match {
+      case "Wind"    => s"$newValue,${temp(1)},${temp(2)}"
+      case "Hydro"   => s"${temp(0)},$newValue,${temp(2)}"
+      case "Nuclear" => s"${temp(0)},${temp(1)},$newValue"
     }
-    bufferedSource.close
+    lines.updated(1, newLine)
   }
 
-  // Modify the energy sources
-  def modifySources(filePath: String): Unit = {
+  // Read the energy sources
+  def readSources(
+      modificationFn: (List[String], String, String) => List[String]
+  ): Unit = {
     // Read the energy sources
-    readData(filePath)
+    println("Reading sources...")
+    val bufferedSource = Source.fromFile(energySources)
+    def readSourcesHelper(lines: Iterator[String]): Unit = {
+      if (lines.hasNext) {
+        val line = lines.next()
+        val cols = line.split(",").map(_.trim)
+        println(s"${cols(0)}\t${cols(1)}\t${cols(2)}")
+        readSourcesHelper(lines)
+      }
+    }
+    readSourcesHelper(bufferedSource.getLines)
+    bufferedSource.close
 
-    // Modify the energy sources
     print("Enter your choice:\n1) Modify\n2) Exit\n")
     val choice = readLine()
     choice match {
@@ -79,26 +110,27 @@ object Main {
         val choice2 = readLine()
         print("Enter the new value: ")
         val newValue = readLine()
-        val lines = Source.fromFile(filePath).getLines.toList
-        val temp = lines(1).split(",")
-        val pw = new java.io.PrintWriter(filePath)
-        choice2 match {
+        val lines = Source.fromFile(energySources).getLines.toList
+        val pw = new java.io.PrintWriter(energySources)
+        val newLines = choice2 match {
           case "1" =>
-            val newLines = lines.updated(1, s"$newValue,${temp(1)},${temp(2)}")
-            newLines.foreach(pw.println)
+            modificationFn(lines, newValue, "Wind")
           case "2" =>
-            val newLines = lines.updated(1, s"${temp(0)},$newValue,${temp(2)}")
-            newLines.foreach(pw.println)
+            modificationFn(lines, newValue, "Hydro")
           case "3" =>
-            val newLines = lines.updated(1, s"${temp(0)},${temp(1)},$newValue")
-            newLines.foreach(pw.println)
+            modificationFn(lines, newValue, "Nuclear")
           case "4" =>
-            return
+            return List.empty[String]
           case _ =>
             println("Invalid choice")
+            List.empty[String]
         }
-        pw.close()
-        println("Value updated")
+        // Write the new lines to the file
+        if (newLines.nonEmpty) {
+          newLines.foreach(pw.println)
+          pw.close()
+          println("Value updated")
+        }
       case "2" =>
         return
       case _ =>
@@ -107,29 +139,30 @@ object Main {
   }
 
   // Calculate the mean, median, mode, range and midrange of the data
-  def calculateData(filePath: String): Unit = {
-    var data = List[Double]()
-    val bufferedSource = io.Source.fromFile(filePath)
-    for (line <- bufferedSource.getLines.drop(1)) {
-      val cols = line.split(",").map(_.trim)
-      data = data :+ cols(2).toDouble
+  def analyzeData(data: Map[Date, Double]): Unit = {
+    if (data == null) {
+      println("No data to analyze")
+      return
     }
-    bufferedSource.close
+
+    // Convert the data to a list
+    val convertedData = data.values.toList
 
     // Calculate the mean
-    val mean = data.sum / data.length
+    val mean = convertedData.sum / convertedData.length
     println(s"Mean: $mean")
 
     // Calculate the median
     val median = {
-      val (lower, upper) = data.sortWith(_ < _).splitAt(data.length / 2)
-      if (data.length % 2 == 0) (lower.last + upper.head) / 2.0
+      val (lower, upper) =
+        convertedData.sortWith(_ < _).splitAt(convertedData.length / 2)
+      if (convertedData.length % 2 == 0) (lower.last + upper.head) / 2.0
       else upper.head
     }
     println(s"Median: $median")
 
     // Calculate the mode
-    val mode = data
+    val mode = convertedData
       .groupBy(identity)
       .view
       .mapValues(_.size)
@@ -138,65 +171,257 @@ object Main {
     println(s"Mode: $mode")
 
     // Calculate the range
-    val range = data.max - data.min
+    val range = convertedData.max - convertedData.min
     println(s"Range: $range")
 
     // Calculate the midrange
-    val midrange = (data.max + data.min) / 2
+    val midrange = (convertedData.max + convertedData.min) / 2
     println(s"Midrange: $midrange")
   }
 
-  // Analyze the data
-  def analyzeData(): Unit = {
+  // Compare timestamps
+
+  def compareTime(
+      lastTimestamp: Date,
+      data: List[String],
+      filter: Int,
+      format: SimpleDateFormat
+  ): Map[Date, Double] = {
+    // Helper function
+    def compareTimeHelper(
+        data: List[String],
+        interval: Date,
+        acc: Map[Date, Double]
+    ): Map[Date, Double] = {
+      if (data.isEmpty) {
+        acc
+      } else {
+        val cols = data.head.split(",").map(_.trim)
+        val timestamp = cols(0)
+        val date = format.parse(timestamp)
+        if (date.compareTo(interval) >= 0) {
+          compareTimeHelper(
+            data.tail,
+            interval,
+            acc + (date -> cols(2).toDouble)
+          )
+        } else {
+          compareTimeHelper(data.tail, interval, acc)
+        }
+      }
+    }
+
+    // Calculate the interval for last hour, last 24-hour, last week, last month or all time
+    val interval = filter match {
+      case 1 => new Date(lastTimestamp.getTime - 60 * 60 * 1000)
+      case 2 => new Date(lastTimestamp.getTime - 24 * 60 * 60 * 1000)
+      case 3 => new Date(lastTimestamp.getTime - 7 * 24 * 60 * 60 * 1000)
+      case 4 => new Date(lastTimestamp.getTime - 30 * 24 * 60 * 60 * 1000)
+      case 5 => new Date(0)
+    }
+
+    compareTimeHelper(data.drop(1), interval, Map.empty)
+  }
+
+  // Filter the data
+  def filterData(
+      data: List[String],
+      compareFn: (
+          Date,
+          List[String],
+          Int,
+          SimpleDateFormat
+      ) => Map[Date, Double]
+  ): Map[Date, Double] = {
+    // Get last timestamp
+    val format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+    val lastTimestamp = format.parse(data.last)
     print(
-      "Enter source to analyze:\n1) Wind\n2) Hydro\n3) Nuclear\n4) All\n5) Exit\n"
+      "Filter by:\n1) Last hour\n2) Last 24 hours\n3) Last week\n4) Last month\n5) All\n6) Exit\nEnter choice: "
     )
     val choice = readLine()
-    choice match {
+    val filteredTimestamps = choice match {
       case "1" =>
-        println("Analyzing wind data...")
-        calculateData("wind.csv")
+        compareFn(lastTimestamp, data, 1, format)
       case "2" =>
-        println("Analyzing hydro data...")
-        calculateData("hydro.csv")
+        compareFn(lastTimestamp, data, 2, format)
       case "3" =>
-        println("Analyzing nuclear data...")
-        calculateData("nuclear.csv")
+        compareFn(lastTimestamp, data, 3, format)
       case "4" =>
-        println("Analyzing all data...")
-        calculateData("data.csv")
+        compareFn(lastTimestamp, data, 4, format)
       case "5" =>
-        return
+        compareFn(lastTimestamp, data, 5, format)
+      case "6" =>
+        return Map.empty[Date, Double]
       case _ =>
         println("Invalid choice")
+        Map.empty[Date, Double]
+    }
+    filteredTimestamps
+  }
+
+  // Read data from a file
+  def readData(): List[String] = {
+    print(
+      "Sources:\n1) Wind\n2) Hydro\n3) Nuclear\n4) All\n5) Exit\nEnter your choice: "
+    )
+    val choice = readLine()
+    val bufferedSource = choice match {
+      case "1" =>
+        Source.fromFile("wind.csv")
+      case "2" =>
+        Source.fromFile("hydro.csv")
+      case "3" =>
+        Source.fromFile("nuclear.csv")
+      case "4" =>
+        Source.fromFile("data.csv")
+      case "5" =>
+        return null
+      case _ =>
+        println("Invalid choice")
+        null
+    }
+    val data = bufferedSource.getLines.toList
+    bufferedSource.close
+    data
+  }
+
+  // Sort the data by timestamp or value
+  def sortData(data: Map[Date, Double]): Map[Date, Double] = {
+    print(
+      "Sort by:\n1) Timestamp (Ascending)\n2) Timestamp (Descending)\n3) Value (Ascending)\n4) Value (Descending)\n5) Exit\nEnter choice: "
+    )
+    val choice = readLine()
+    val sortedData = choice match {
+      case "1" =>
+        // Sort data by ascending timestamp
+        println("Sorting data by ascending timestamp...")
+        ListMap(data.toSeq.sortBy(_._1): _*)
+      case "2" =>
+        // Sort data by descending timestamp
+        println("Sorting data by descending timestamp...")
+        ListMap(data.toSeq.sortBy(_._1).reverse: _*)
+      case "3" =>
+        // Sort data by ascending value
+        println("Sorting data by ascending value...")
+        ListMap(data.toSeq.sortBy(_._2): _*)
+      case "4" =>
+        // Sort data by descending value
+        println("Sorting data by descending value...")
+        ListMap(data.toSeq.sortBy(_._2).reverse: _*)
+      case "5" =>
+        return Map.empty[Date, Double]
+      case _ =>
+        println("Invalid choice")
+        Map.empty[Date, Double]
+    }
+    sortedData
+  }
+
+  // Print data
+  def printData(data: Map[Date, Double]): Unit = {
+    def printDataHelper(data: Map[Date, Double]): Unit = {
+      if (data.nonEmpty) {
+        val (k, v) = data.head
+        println(s"${k}: \t${v}MW")
+        printDataHelper(data.tail)
+      }
+    }
+
+    println("\tTimestamp\t\tValue")
+    if (data.nonEmpty) {
+      printDataHelper(data)
+    } else {
+      println("No data to print")
     }
   }
 
-  // Main function
+  // Search data
+  def searchData(data: List[String]): Map[Date, Double] = {
+    val format = new SimpleDateFormat("yyyy-MM-dd")
+    print("Enter the date (yyyy-MM-dd) to search for: ")
+    val date = readLine()
+    val searchDate = format.parse(date)
+    // Iterate through the data and add the data to the map if the date matches
+    val newData =
+      data.drop(1).foldLeft(Map.empty[Date, Double]) { (acc, line) =>
+        val cols = line.split(",").map(_.trim)
+        val timestamp = cols(0)
+        val value = cols(2).toDouble
+        if (value < alertThreshold) {
+          acc + ((new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss"))
+            .parse(timestamp) -> value)
+        } else {
+          acc
+        }
+      }
+    newData
+  }
+
+  // Alert user if energy production is below the threshold
+  def alertUser(): Unit = {
+    val sources = dataSources.values.toList.dropRight(1)
+    sources.map { source =>
+      val bufferedSource = Source.fromFile(source)
+      val data = bufferedSource.getLines.toList
+      bufferedSource.close
+      val alert = data.drop(1).foldLeft(false) { (acc, line) =>
+        val cols = line.split(",").map(_.trim)
+        val value = cols(2).toDouble
+        if (value < alertThreshold) {
+          true
+        } else {
+          acc
+        }
+      }
+      if (alert) {
+        println(
+          s"ALERT: ${source} has production values below the threshold of ${alertThreshold}MW. Please scan systems for details!"
+        )
+      }
+    }
+  }
+
+  // Scan data for anomalies
+  def scanSystem(data: List[String]): Map[Date, Double] = {
+    val newData =
+      data.drop(1).foldLeft(Map.empty[Date, Double]) { (acc, line) =>
+        val cols = line.split(",").map(_.trim)
+        val timestamp = cols(0)
+        val value = cols(2).toDouble
+        if (value < alertThreshold) {
+          acc + ((new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss"))
+            .parse(timestamp) -> value)
+        } else {
+          acc
+        }
+      }
+    newData
+  }
+
+// Main function
   def main(args: Array[String]): Unit = {
     while (true) {
+      alertUser()
       print(
-        "REPS management system:\n1) Check energy sources\n2) Collect data\n3) View data\n4) Analyze data\n5) Exit\nEnter your choice: "
+        "REPS management system:\n1) Check energy sources\n2) Collect data\n3) View data\n4) Analyze data\n5) Search data\n6) Scan system\n0) Exit\nEnter your choice: "
       )
       val choice = readLine()
 
       choice match {
         case "1" =>
-          modifySources("sources.csv")
+          readSources(modifySources)
         case "2" =>
-          collectData(
-            Map(
-              188 -> "nuclear.csv",
-              191 -> "hydro.csv",
-              181 -> "wind.csv",
-              192 -> "data.csv"
-            )
-          )
+          collectData()
         case "3" =>
-          readData("data.csv")
+          printData(sortData(filterData(readData(), compareTime)))
         case "4" =>
-          analyzeData()
+          analyzeData(filterData(readData(), compareTime))
         case "5" =>
+          printData(sortData(searchData(readData())))
+        case "6" =>
+          printData(sortData(scanSystem(readData())))
+        case "0" =>
           println("Exiting...")
           System.exit(0)
         case _ =>
