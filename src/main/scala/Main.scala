@@ -88,17 +88,23 @@ object Main {
   ): Unit = {
     // Read the energy sources
     println("Reading sources...")
-    val bufferedSource = Source.fromFile(energySources)
-    def readSourcesHelper(lines: Iterator[String]): Unit = {
-      if (lines.hasNext) {
-        val line = lines.next()
-        val cols = line.split(",").map(_.trim)
-        println(s"${cols(0)}\t${cols(1)}\t${cols(2)}")
-        readSourcesHelper(lines)
+    try {
+      val bufferedSource = Source.fromFile(energySources)
+      def readSourcesHelper(lines: Iterator[String]): Unit = {
+        if (lines.hasNext) {
+          val line = lines.next()
+          val cols = line.split(",").map(_.trim)
+          println(s"${cols(0)}\t${cols(1)}\t${cols(2)}")
+          readSourcesHelper(lines)
+        }
       }
+      readSourcesHelper(bufferedSource.getLines)
+      bufferedSource.close
+    } catch {
+      case e: Exception =>
+        println("No sources found")
+        return
     }
-    readSourcesHelper(bufferedSource.getLines)
-    bufferedSource.close
 
     print("Enter your choice:\n1) Modify\n2) Exit\n")
     val choice = readLine()
@@ -266,24 +272,30 @@ object Main {
       "Sources:\n1) Wind\n2) Hydro\n3) Nuclear\n4) All\n5) Exit\nEnter your choice: "
     )
     val choice = readLine()
-    val bufferedSource = choice match {
-      case "1" =>
-        Source.fromFile("wind.csv")
-      case "2" =>
-        Source.fromFile("hydro.csv")
-      case "3" =>
-        Source.fromFile("nuclear.csv")
-      case "4" =>
-        Source.fromFile("data.csv")
-      case "5" =>
-        return null
-      case _ =>
-        println("Invalid choice")
+    try {
+      val bufferedSource = choice match {
+        case "1" =>
+          Source.fromFile("wind.csv")
+        case "2" =>
+          Source.fromFile("hydro.csv")
+        case "3" =>
+          Source.fromFile("nuclear.csv")
+        case "4" =>
+          Source.fromFile("data.csv")
+        case "5" =>
+          return null
+        case _ =>
+          println("Invalid choice")
+          null
+      }
+      val data = bufferedSource.getLines.toList
+      bufferedSource.close
+      data
+    } catch {
+      case e: Exception =>
+        println("File not found")
         null
     }
-    val data = bufferedSource.getLines.toList
-    bufferedSource.close
-    data
   }
 
   // Sort the data by timestamp or value
@@ -360,25 +372,30 @@ object Main {
 
   // Alert user if energy production is below the threshold
   def alertUser(): Unit = {
-    val sources = dataSources.values.toList.dropRight(1)
-    sources.map { source =>
-      val bufferedSource = Source.fromFile(source)
-      val data = bufferedSource.getLines.toList
-      bufferedSource.close
-      val alert = data.drop(1).foldLeft(false) { (acc, line) =>
-        val cols = line.split(",").map(_.trim)
-        val value = cols(2).toDouble
-        if (value < alertThreshold) {
-          true
-        } else {
-          acc
+    try {
+      val sources = dataSources.values.toList.dropRight(1)
+      sources.map { source =>
+        val bufferedSource = Source.fromFile(source)
+        val data = bufferedSource.getLines.toList
+        bufferedSource.close
+        val alert = data.drop(1).foldLeft(false) { (acc, line) =>
+          val cols = line.split(",").map(_.trim)
+          val value = cols(2).toDouble
+          if (value < alertThreshold) {
+            true
+          } else {
+            acc
+          }
+        }
+        if (alert) {
+          println(
+            s"ALERT: ${source} has production values below the threshold of ${alertThreshold}MW. Please scan system for details!"
+          )
         }
       }
-      if (alert) {
-        println(
-          s"ALERT: ${source} has production values below the threshold of ${alertThreshold}MW. Please scan systems for details!"
-        )
-      }
+    } catch {
+      case e: Exception =>
+        return
     }
   }
 

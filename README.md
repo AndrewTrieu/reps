@@ -33,7 +33,6 @@ sequenceDiagram
     System->>Fingrid API: Get data
     Fingrid API-->>System: Return data
     System->>Files: Store data in files
-    
 ```
 
 - The system provides a view of the power plant's energy generation and storage capacity, allowing operators to adjust the power plant's operation as needed. This view shows the data stored in the file.
@@ -119,5 +118,7 @@ classDiagram
         +alertUser()
         +scanSystem(data: List[String])
     }
-
 ```
+
+## Video
+
