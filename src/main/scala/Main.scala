@@ -186,7 +186,6 @@ object Main {
   }
 
   // Compare timestamps
-
   def compareTime(
       lastTimestamp: Date,
       data: List[String],
