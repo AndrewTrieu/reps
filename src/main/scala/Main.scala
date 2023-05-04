@@ -367,7 +367,7 @@ object Main {
         val cols = line.split(",").map(_.trim)
         val timestamp = cols(0)
         val value = cols(2).toDouble
-        if (value < alertThreshold) {
+        if (format.parse(timestamp) == searchDate) {
           acc + ((new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss"))
             .parse(timestamp) -> value)
         } else {
