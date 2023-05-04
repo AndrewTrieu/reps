@@ -147,7 +147,7 @@ object Main {
   // Calculate the mean, median, mode, range and midrange of the data
   def analyzeData(data: Map[Date, Double]): Unit = {
     if (data == null) {
-      println("No data to analyze")
+      println("No data available")
       return
     }
 
@@ -239,6 +239,9 @@ object Main {
           SimpleDateFormat
       ) => Map[Date, Double]
   ): Map[Date, Double] = {
+    if (data == null) {
+      return null
+    }
     // Get last timestamp
     val format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
     val lastTimestamp = format.parse(data.last)
@@ -293,7 +296,6 @@ object Main {
       data
     } catch {
       case e: Exception =>
-        println("File not found")
         null
     }
   }
@@ -303,6 +305,9 @@ object Main {
     print(
       "Sort by:\n1) Timestamp (Ascending)\n2) Timestamp (Descending)\n3) Value (Ascending)\n4) Value (Descending)\n5) Exit\nEnter choice: "
     )
+    if (data == null) {
+      return null
+    }
     val choice = readLine()
     val sortedData = choice match {
       case "1" =>
@@ -340,16 +345,19 @@ object Main {
       }
     }
 
-    println("\tTimestamp\t\tValue")
-    if (data.nonEmpty) {
-      printDataHelper(data)
+    if (data == null) {
+      println("No data available")
     } else {
-      println("No data to print")
+      println("\tTimestamp\t\tValue")
+      printDataHelper(data)
     }
   }
 
   // Search data
   def searchData(data: List[String]): Map[Date, Double] = {
+    if (data == null) {
+      return null
+    }
     val format = new SimpleDateFormat("yyyy-MM-dd")
     print("Enter the date (yyyy-MM-dd) to search for: ")
     val date = readLine()
@@ -401,6 +409,9 @@ object Main {
 
   // Scan data for anomalies
   def scanSystem(data: List[String]): Map[Date, Double] = {
+    if (data == null) {
+      return null
+    }
     val newData =
       data.drop(1).foldLeft(Map.empty[Date, Double]) { (acc, line) =>
         val cols = line.split(",").map(_.trim)
