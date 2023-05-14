@@ -1,3 +1,8 @@
+/* Group 14
+Trieu Huynh Ba Nguyen
+Roosa Pipatti
+Avaneep Kamal */
+
 import java.net.{HttpURLConnection, URL}
 import java.nio.file.{Files, Paths}
 import java.util.Date
